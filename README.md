@@ -1,6 +1,6 @@
 # 💳 Payment Resilience (payresilience)
 
-### Multi-Gateway Payment Router with Circuit Breakers & Automated Fallback (PIX, Stripe, Stars)
+### Multi-Gateway PIX Payment Router with Circuit Breakers & Automated Fallback
 
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)](https://python.org)
 [![Architecture](https://img.shields.io/badge/Pattern-Circuit%20Breaker%20%7C%20Router-orange.svg)](https://github.com/Kaio-Comk/Payment-Resilience)
@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Never lose a checkout conversion to banking API downtime.**  
-*Automatic fallback router with thread-safe Circuit Breaker pattern (CLOSED, OPEN, HALF_OPEN) for PIX, Mercado Pago, EFI, Stripe, and Telegram Payments.*
+*Automatic fallback router with a thread-safe Circuit Breaker (CLOSED, OPEN, HALF_OPEN) in front of any PIX provider you plug in (EFI, Mercado Pago, ...).*
 
 ---
 
@@ -22,14 +22,22 @@ flowchart TD
     Check1 -->|CLOSED| GW1["🏦 EFI Gateway API"]
     Check1 -->|OPEN / Timeout| Check2{"Secondary Gateway (Mercado Pago) Healthy?"}
     
-    GW1 -->|API Failure (5x)| Trip1["💥 Trip Circuit Breaker to OPEN"]
+    GW1 -->|API Failure (3x)| Trip1["💥 Trip Circuit Breaker to OPEN (retry after 30 s)"]
     Trip1 --> Check2
     
     Check2 -->|CLOSED| GW2["🏦 Mercado Pago Gateway API"]
-    Check2 -->|OPEN / Timeout| GW3["⭐ Telegram Stars / Stripe Fallback"]
+    Check2 -->|OPEN| Fail["🛑 RuntimeError: all gateways unavailable"]
     
-    GW2 & GW3 --> Invoice["📄 Unified PaymentInvoice (QR Code + Copy-Paste)"]
+    GW1 & GW2 --> Invoice["📄 Unified PaymentInvoice (QR Code + Copy-Paste)"]
 ```
+
+> **What is included:** the router, the circuit breaker and the `PaymentGateway` base class (`create_pix`).
+> Gateways are yours to implement (`_do_create_pix`); no provider SDK ships here. Each `PaymentGateway`
+> opens its circuit after 3 consecutive failures and allows a new attempt after 30 s (both configurable:
+> `PaymentGateway(name, fail_threshold=3, reset_timeout=30.0)`). While HALF_OPEN only ONE trial request
+> goes through: success closes the circuit, failure reopens it (a probe that never answers is replaced after
+> `reset_timeout`). An open circuit raises `CircuitOpenError`; an invalid amount raises `ValueError` and does
+> not count as a gateway failure.
 
 ---
 
